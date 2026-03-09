@@ -1,0 +1,228 @@
+name: Linux Firecracker VM
+description: Run commands inside a Linux Firecracker microVM
+
+inputs:
+  kernel-url:
+    description: 'URL to vmlinux kernel binary'
+    required: false
+    default: ''
+  rootfs-url:
+    description: 'URL to rootfs.ext4.zst (zstd-compressed)'
+    required: false
+    default: ''
+  ssh-private-key-url:
+    description: 'URL to SSH private key for VM access'
+    required: false
+    default: ''
+  firecracker-version:
+    description: 'Firecracker release version'
+    required: false
+    default: 'v1.14.1'
+  vcpus:
+    description: 'Number of vCPUs'
+    required: false
+    default: '2'
+  memory:
+    description: 'Memory in MiB'
+    required: false
+    default: '4096'
+  disk-size:
+    description: 'Rootfs disk size (e.g., 5G)'
+    required: false
+    default: '5G'
+  cmd:
+    description: 'Commands to run inside the VM'
+    required: true
+  verbose:
+    description: 'Enable debug output'
+    required: false
+    default: 'false'
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Firecracker VM
+      id: setup
+      shell: bash
+      env:
+        INPUT_KERNEL_URL: ${{ inputs.kernel-url }}
+        INPUT_ROOTFS_URL: ${{ inputs.rootfs-url }}
+        INPUT_SSH_KEY_URL: ${{ inputs.ssh-private-key-url }}
+        INPUT_FC_VERSION: ${{ inputs.firecracker-version }}
+        INPUT_DISK_SIZE: ${{ inputs.disk-size }}
+        INPUT_VCPUS: ${{ inputs.vcpus }}
+        INPUT_MEMORY: ${{ inputs.memory }}
+        INPUT_VERBOSE: ${{ inputs.verbose }}
+      run: |
+        set -euo pipefail
+
+        FC_DIR="/tmp/firecracker"
+        mkdir -p "$FC_DIR"
+
+        # Resolve default URLs from latest release if not provided
+        RELEASE_BASE="https://github.com/fenio/linux-firecracker/releases/latest/download"
+        KERNEL_URL="${INPUT_KERNEL_URL:-${RELEASE_BASE}/vmlinux}"
+        ROOTFS_URL="${INPUT_ROOTFS_URL:-${RELEASE_BASE}/rootfs.ext4.zst}"
+        SSH_KEY_URL="${INPUT_SSH_KEY_URL:-${RELEASE_BASE}/id_rsa}"
+
+        [ "$INPUT_VERBOSE" = "true" ] && echo "Kernel URL: $KERNEL_URL"
+        [ "$INPUT_VERBOSE" = "true" ] && echo "Rootfs URL: $ROOTFS_URL"
+
+        # Download Firecracker binary
+        ARCH="$(uname -m)"
+        FC_URL="https://github.com/firecracker-microvm/firecracker/releases/download/${INPUT_FC_VERSION}/firecracker-${INPUT_FC_VERSION}-${ARCH}"
+        echo "Downloading Firecracker ${INPUT_FC_VERSION}..."
+        curl -fSL -o "$FC_DIR/firecracker" "$FC_URL"
+        chmod +x "$FC_DIR/firecracker"
+
+        # Download kernel
+        echo "Downloading kernel..."
+        curl -fSL -o "$FC_DIR/vmlinux" "$KERNEL_URL"
+
+        # Download and decompress rootfs
+        echo "Downloading rootfs..."
+        curl -fSL -o "$FC_DIR/rootfs.ext4.zst" "$ROOTFS_URL"
+        echo "Decompressing rootfs..."
+        zstd -d "$FC_DIR/rootfs.ext4.zst" -o "$FC_DIR/rootfs.ext4"
+        rm "$FC_DIR/rootfs.ext4.zst"
+
+        # Resize rootfs to requested size
+        echo "Resizing rootfs to ${INPUT_DISK_SIZE}..."
+        truncate -s "$INPUT_DISK_SIZE" "$FC_DIR/rootfs.ext4"
+        resize2fs "$FC_DIR/rootfs.ext4"
+
+        # Download SSH key
+        echo "Downloading SSH key..."
+        curl -fSL -o "$FC_DIR/id_rsa" "$SSH_KEY_URL"
+        chmod 600 "$FC_DIR/id_rsa"
+
+        # Configure SSH
+        sudo mkdir -p /root/.ssh
+        cat >> /etc/ssh/ssh_config <<SSHEOF
+        Host firecracker
+            HostName 172.16.0.2
+            User root
+            IdentityFile ${FC_DIR}/id_rsa
+            StrictHostKeyChecking no
+            UserKnownHostsFile /dev/null
+            LogLevel ERROR
+        SSHEOF
+
+        # Setup TAP networking
+        echo "Setting up TAP networking..."
+        INET_DEV=$(ip route show default | awk '{print $5}' | head -1)
+        TAP_DEV="tap0"
+
+        sudo ip tuntap add dev "$TAP_DEV" mode tap
+        sudo ip addr add 172.16.0.1/24 dev "$TAP_DEV"
+        sudo ip link set dev "$TAP_DEV" up
+
+        sudo sh -c 'echo 1 > /proc/sys/net/ipv4/ip_forward'
+        sudo iptables -t nat -A POSTROUTING -o "$INET_DEV" -j MASQUERADE
+        sudo iptables -I FORWARD 1 -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT
+        sudo iptables -I FORWARD 1 -i "$TAP_DEV" -o "$INET_DEV" -j ACCEPT
+
+        # Create VM config
+        cat > "$FC_DIR/vmconfig.json" <<VMEOF
+        {
+          "boot-source": {
+            "kernel_image_path": "${FC_DIR}/vmlinux",
+            "boot_args": "console=ttyS0 reboot=k panic=1 pci=off ip=172.16.0.2::172.16.0.1:255.255.255.0::eth0:off"
+          },
+          "drives": [{
+            "drive_id": "rootfs",
+            "path_on_host": "${FC_DIR}/rootfs.ext4",
+            "is_root_device": true,
+            "is_read_only": false
+          }],
+          "network-interfaces": [{
+            "iface_id": "eth0",
+            "guest_mac": "06:00:AC:10:00:02",
+            "host_dev_name": "${TAP_DEV}"
+          }],
+          "machine-config": {
+            "vcpu_count": ${INPUT_VCPUS},
+            "mem_size_mib": ${INPUT_MEMORY},
+            "smt": false
+          }
+        }
+        VMEOF
+
+        # Start Firecracker
+        echo "Starting Firecracker VM..."
+        sudo nohup "$FC_DIR/firecracker" \
+          --config-file "$FC_DIR/vmconfig.json" \
+          --log-path "$FC_DIR/firecracker.log" \
+          --level Info \
+          > "$FC_DIR/serial.log" 2>&1 &
+        echo $! > "$FC_DIR/firecracker.pid"
+
+        # Wait for SSH
+        echo "Waiting for VM to boot..."
+        for i in $(seq 1 30); do
+          if sudo ssh firecracker echo "VM is ready" 2>/dev/null; then
+            echo "VM booted in ~${i} seconds"
+            break
+          fi
+          if [ "$i" -eq 30 ]; then
+            echo "ERROR: VM failed to boot within 30 seconds"
+            echo "=== Serial log ==="
+            cat "$FC_DIR/serial.log" || true
+            echo "=== Firecracker log ==="
+            cat "$FC_DIR/firecracker.log" || true
+            exit 1
+          fi
+          sleep 1
+        done
+
+        echo "fc_dir=$FC_DIR" >> "$GITHUB_OUTPUT"
+
+    - name: Run commands in VM
+      shell: bash
+      env:
+        INPUT_CMD: ${{ inputs.cmd }}
+        FC_DIR: ${{ steps.setup.outputs.fc_dir }}
+      run: |
+        set -euo pipefail
+
+        # Write script to temp file and SCP it into VM
+        SCRIPT_FILE="/tmp/vm-script.sh"
+        cat > "$SCRIPT_FILE" <<'CMDEOF'
+        #!/bin/bash
+        set -euo pipefail
+        ${{ inputs.cmd }}
+        CMDEOF
+        chmod +x "$SCRIPT_FILE"
+
+        sudo scp -F /etc/ssh/ssh_config "$SCRIPT_FILE" firecracker:/tmp/vm-script.sh
+        sudo ssh -F /etc/ssh/ssh_config firecracker bash /tmp/vm-script.sh
+
+    - name: Cleanup Firecracker VM
+      if: always()
+      shell: bash
+      env:
+        FC_DIR: ${{ steps.setup.outputs.fc_dir }}
+      run: |
+        FC_DIR="${FC_DIR:-/tmp/firecracker}"
+
+        # Show serial log
+        if [ -f "$FC_DIR/serial.log" ]; then
+          echo "::group::VM Serial Log"
+          cat "$FC_DIR/serial.log" || true
+          echo "::endgroup::"
+        fi
+
+        # Stop VM
+        if [ -f "$FC_DIR/firecracker.pid" ]; then
+          PID=$(cat "$FC_DIR/firecracker.pid")
+          sudo kill "$PID" 2>/dev/null || true
+          # Wait for process to exit
+          for i in $(seq 1 10); do
+            kill -0 "$PID" 2>/dev/null || break
+            sleep 1
+          done
+          sudo kill -9 "$PID" 2>/dev/null || true
+        fi
+
+        # Remove TAP device
+        sudo ip link del tap0 2>/dev/null || true
