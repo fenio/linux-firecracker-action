@@ -154,6 +154,7 @@ runs:
         echo "Starting Firecracker VM..."
         sudo nohup "$FC_DIR/firecracker" \
           --config-file "$FC_DIR/vmconfig.json" \
+          --enable-pci \
           --log-path "$FC_DIR/firecracker.log" \
           --level Info \
           > "$FC_DIR/serial.log" 2>&1 &
