@@ -17,8 +17,8 @@ GitHub Action that runs commands inside a Linux [Firecracker](https://github.com
 ```yaml
 - uses: fenio/setup-firecracker@main
   with:
-    kernel-url: https://github.com/fenio/linux-firecracker/releases/latest/download/vmlinux-tns-csi
-    rootfs-url: https://github.com/fenio/linux-firecracker/releases/latest/download/rootfs-tns-csi.ext4.zst
+    kernel-url: https://github.com/fenio/firecracker/releases/latest/download/vmlinux-tns-csi
+    rootfs-url: https://github.com/fenio/firecracker/releases/latest/download/rootfs-tns-csi.ext4.zst
     vcpus: 4
     memory: 4096
     disk-size: 5G
@@ -44,7 +44,7 @@ GitHub Action that runs commands inside a Linux [Firecracker](https://github.com
 
 ## How it works
 
-1. Downloads Firecracker, kernel, and rootfs from [linux-firecracker](https://github.com/fenio/linux-firecracker/releases) releases
+1. Downloads Firecracker, kernel, and rootfs from [firecracker](https://github.com/fenio/firecracker/releases) releases
 2. Sets up TAP networking with NAT (VM at `172.16.0.2`, host at `172.16.0.1`)
 3. Starts the microVM with PCI VirtIO transport
 4. Waits for SSH, copies the script into the VM, and runs it
@@ -52,7 +52,7 @@ GitHub Action that runs commands inside a Linux [Firecracker](https://github.com
 
 ## Profiles
 
-Defaults use the `base` kernel and rootfs. For other workloads, override `kernel-url` and `rootfs-url` with a different profile from [linux-firecracker releases](https://github.com/fenio/linux-firecracker/releases):
+Defaults use the `base` kernel and rootfs. For other workloads, override `kernel-url` and `rootfs-url` with a different profile from [firecracker releases](https://github.com/fenio/firecracker/releases):
 
 **Kernel:** `vmlinux-minimal` | `vmlinux-base` (default) | [`vmlinux-tns-csi`](https://github.com/fenio/tns-csi)
 
