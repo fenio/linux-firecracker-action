@@ -1,11 +1,11 @@
-# linux-firecracker-action
+# setup-firecracker
 
 GitHub Action that runs commands inside a Linux [Firecracker](https://github.com/firecracker-microvm/firecracker) microVM.
 
 ## Usage
 
 ```yaml
-- uses: fenio/linux-firecracker-action@main
+- uses: fenio/setup-firecracker@main
   with:
     cmd: |
       echo "Hello from Firecracker VM"
@@ -15,7 +15,7 @@ GitHub Action that runs commands inside a Linux [Firecracker](https://github.com
 ### Run k3s with the [tns-csi](https://github.com/fenio/tns-csi) profile
 
 ```yaml
-- uses: fenio/linux-firecracker-action@main
+- uses: fenio/setup-firecracker@main
   with:
     kernel-url: https://github.com/fenio/linux-firecracker/releases/latest/download/vmlinux-tns-csi
     rootfs-url: https://github.com/fenio/linux-firecracker/releases/latest/download/rootfs-tns-csi.ext4.zst
