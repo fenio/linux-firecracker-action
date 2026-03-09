@@ -100,14 +100,14 @@ runs:
 
         # Configure SSH
         sudo mkdir -p /root/.ssh
-        cat >> /etc/ssh/ssh_config <<SSHEOF
+        sudo tee -a /etc/ssh/ssh_config > /dev/null <<SSHEOF
         Host firecracker
-            HostName 172.16.0.2
-            User root
-            IdentityFile ${FC_DIR}/id_rsa
-            StrictHostKeyChecking no
-            UserKnownHostsFile /dev/null
-            LogLevel ERROR
+          HostName 172.16.0.2
+          User root
+          IdentityFile ${FC_DIR}/id_rsa
+          StrictHostKeyChecking no
+          UserKnownHostsFile /dev/null
+          LogLevel ERROR
         SSHEOF
 
         # Setup TAP networking
