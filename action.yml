@@ -64,7 +64,7 @@ runs:
 
         # Resolve default URLs from latest release if not provided
         RELEASE_BASE="https://github.com/fenio/firecracker/releases/latest/download"
-        KERNEL_URL="${INPUT_KERNEL_URL:-${RELEASE_BASE}/vmlinux-base}"
+        KERNEL_URL="${INPUT_KERNEL_URL:-${RELEASE_BASE}/vmlinux-6.18.16-base}"
         ROOTFS_URL="${INPUT_ROOTFS_URL:-${RELEASE_BASE}/rootfs-base.ext4.zst}"
         SSH_KEY_URL="${INPUT_SSH_KEY_URL:-${RELEASE_BASE}/id_rsa}"
 

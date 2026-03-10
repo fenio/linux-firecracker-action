@@ -17,7 +17,7 @@ GitHub Action that runs commands inside a Linux [Firecracker](https://github.com
 ```yaml
 - uses: fenio/setup-firecracker@main
   with:
-    kernel-url: https://github.com/fenio/firecracker/releases/latest/download/vmlinux-tns-csi
+    kernel-url: https://github.com/fenio/firecracker/releases/latest/download/vmlinux-6.18.16-tns-csi
     rootfs-url: https://github.com/fenio/firecracker/releases/latest/download/rootfs-tns-csi.ext4.zst
     vcpus: 4
     memory: 4096
@@ -33,7 +33,7 @@ GitHub Action that runs commands inside a Linux [Firecracker](https://github.com
 | Input | Default | Description |
 |-------|---------|-------------|
 | `cmd` | *required* | Commands to run inside the VM |
-| `kernel-url` | latest `vmlinux-base` | URL to vmlinux kernel binary |
+| `kernel-url` | latest `vmlinux-6.18.16-base` | URL to vmlinux kernel binary |
 | `rootfs-url` | latest `rootfs-base.ext4.zst` | URL to zstd-compressed rootfs |
 | `ssh-private-key-url` | latest `id_rsa` | URL to SSH private key |
 | `firecracker-version` | `v1.15.0` | Firecracker release version |
@@ -54,6 +54,6 @@ GitHub Action that runs commands inside a Linux [Firecracker](https://github.com
 
 Defaults use the `base` kernel and rootfs. For other workloads, override `kernel-url` and `rootfs-url` with a different profile from [firecracker releases](https://github.com/fenio/firecracker/releases):
 
-**Kernel:** `vmlinux-minimal` | `vmlinux-base` (default) | [`vmlinux-tns-csi`](https://github.com/fenio/tns-csi)
+**Kernel:** `vmlinux-<version>-<profile>` where version is `6.12.76` or `6.18.16` (default), and profile is `minimal`, `base` (default), or [`tns-csi`](https://github.com/fenio/tns-csi)
 
 **Rootfs:** `rootfs-base.ext4.zst` (default) | [`rootfs-tns-csi.ext4.zst`](https://github.com/fenio/tns-csi) (k3s + nvme-cli, open-iscsi, nfs-common, cifs-utils)
